@@ -1,0 +1,11 @@
+import sqlite3
+conn = sqlite3.connect('Vehicle.db')
+cursor = conn.cursor()
+cursor = conn.execute("SELECT id,name,vehicle_no,mail from vehicle_info")
+for row in cursor:
+    print("id = ",row[0])
+    print("name=", row[1])
+    print("mail_id", row[2])
+print("operation done")
+conn.commit()
+conn.close()

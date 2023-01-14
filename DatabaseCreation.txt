@@ -1,0 +1,7 @@
+import sqlite3
+conn = sqlite3.connect('Vehicle.db')
+cursor = conn.cursor()
+print("Opened database successfully")
+conn.execute('''CREATE TABLE vehicle_info(id INTEGER  NOT NULL,
+name TEXT NOT NULL, vehicle_no TEXT NOT NULL,mail TEXT NOT NULL)''')
+print("table created successfully")

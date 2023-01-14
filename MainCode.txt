@@ -1,0 +1,151 @@
+import sqlite3
+conn = sqlite3.connect('Vehicle.db')
+cursor = conn.cursor()
+import cv2
+import imutils
+import numpy as np
+import pytesseract
+from PIL import Image
+import time
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
+SMTP_SERVER = 'smtp.gmail.com' #Email Server (don't change!)
+SMTP_PORT = 587 #Server Port (don't change!)
+GMAIL_USERNAME = 'parkingdetectionsystem@gmail.com'#change this to match your gmail account
+GMAIL_PASSWORD = 'rtnxfjolcvlaeydl'  #Change this to match your gmail password
+
+k = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+
+'''function for mail'''
+class Emailer:
+    def sendmail(self, recipient, subject, content):
+
+        #Create Headers
+        emailData = MIMEMultipart()
+        emailData['Subject'] = subject
+        emailData['To'] = recipient
+        emailData['From'] = GMAIL_USERNAME
+
+        #Attach our text data
+        emailData.attach(MIMEText(content))
+
+        #Create our Image Data from the defined image
+        '''imageData = MIMEImage(open(image, 'rb').read(), 'jpg')
+        imageData.add_header('Content-Disposition', 'attachment; filename="image.jpg"')
+        emailData.attach(imageData)'''
+
+        #Connect to Gmail Server
+        session = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        session.ehlo()
+        session.starttls()
+        session.ehlo()
+
+        #Login to Gmail
+        session.login(GMAIL_USERNAME, GMAIL_PASSWORD)
+
+        #Send Email & Exit
+        session.sendmail(GMAIL_USERNAME, recipient, emailData.as_string())
+        session.quit
+
+sender = Emailer()
+
+#capture the photo of the car
+
+cap = cv2.VideoCapture(0)
+ret, frame = cap.read()
+img = frame[220:700, 150:550]
+cv2.imshow('Referanc1.jpg',img)
+
+# time.sleep(2)
+#img = cv2.imread('1.jpg',cv2.IMREAD_COLOR)
+
+img = cv2.resize(img, (620,480) )
+gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) #convert to grey scale
+gray = cv2.bilateralFilter(gray, 11, 17, 17) #Blur to reduce noise
+edged = cv2.Canny(gray, 30, 200) #Perform Edge detection
+cnts = cv2.findContours(edged.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+cnts = imutils.grab_contours(cnts)
+cnts = sorted(cnts, key = cv2.contourArea, reverse = True)[:10]
+screenCnt = None
+
+# loop over our contours
+for c in cnts:
+	peri = cv2.arcLength(c, True)
+	approx = cv2.approxPolyDP(c, 0.018 * peri, True)
+	if len(approx) == 4:# if our approximated contour has four points, then
+		screenCnt = approx
+		break
+
+
+
+if screenCnt is None:
+	detected = 0
+	print ("No number plate detected")
+else:
+	detected = 1
+
+if detected == 1:
+	cv2.drawContours(img, [screenCnt], -1, (0, 255, 0), 3)
+
+# Masking the part other than the number plate
+mask = np.zeros(gray.shape,np.uint8)
+new_image = cv2.drawContours(mask,[screenCnt],0,255,-1,)
+new_image = cv2.bitwise_and(img,img,mask=mask)
+
+# Now crop
+(x, y) = np.where(mask == 255)
+(topx, topy) = (np.min(x), np.min(y))
+(bottomx, bottomy) = (np.max(x), np.max(y))
+Cropped = gray[topx:bottomx+1, topy:bottomy+1]
+
+
+
+#Read the number plate
+text = pytesseract.image_to_string(Cropped, config='--psm 6')
+print("Detected Number is:",text)
+print ("initial string : ", text)
+getVals = list(filter(lambda x: x in k,  text))
+result = "".join(getVals)
+# printing final string
+print ("final string", result)
+
+cv2.imshow('image',img)
+cv2.imshow('Cropped',Cropped)
+
+#searching for mail ID
+
+cursor = conn.execute('SELECT mail FROM vehicle_info WHERE vehicle_no=?;', [result])
+#cursor = conn.execute("SELECT id,name,mail_id from cars")
+#print(cursor.fetchall())
+rows = (cursor.fetchall())
+for row in rows:
+    n=row[0]
+    #na=row[1]
+    #m=row[2]
+    print(type(n))
+    print("\n out here=",n)
+conn.commit()
+conn.close()
+#Get image to mail
+'''image= '/home/pi/Desktop/1.jpg'''
+#Prepare and send mail
+#sendTo = 'vishnu.pb2007@gmail.com'
+sendTo = n
+emailSubject = "Unathorised Parking Notice!"
+emailContent = "Your Vehivle parked at Wrong place: " + time.ctime() + text
+sender.sendmail(sendTo, emailSubject, emailContent)
+print("Email Sent")
+
+time.sleep(0.1)
+
+
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+
+time.sleep(0.1)
+
+
+
